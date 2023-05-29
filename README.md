@@ -10,7 +10,8 @@ JedisCluster客户端初始化
   JedisCluster jedisCluster = new JedisCluster(HostAndPort.from("127.0.0.1:6379"));
   jedisCluster.setKeyPrefix("common-prefix");
 ```
-color-jedis支持的命令
+参考分支```color```
+[color-jedis支持的命令](color-jedis.md)
 
 # Jedis
 
