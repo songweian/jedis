@@ -8,6 +8,7 @@ import redis.clients.jedis.args.Rawable;
 import redis.clients.jedis.args.RawableFactory;
 import redis.clients.jedis.commands.ProtocolCommand;
 import redis.clients.jedis.params.IParams;
+import redis.clients.jedis.util.SafeEncoder;
 
 public class CommandArguments implements Iterable<Rawable> {
 
@@ -77,7 +78,7 @@ public class CommandArguments implements Iterable<Rawable> {
       args.add(raw);
     } else if (key instanceof byte[]) {
       byte[] raw = new byte[((byte[]) key).length + keyPrefix.length()];
-      System.arraycopy(keyPrefix.getBytes(StandardCharsets.UTF_8), 0, raw, 0, keyPrefix.length());
+      System.arraycopy(SafeEncoder.encode(keyPrefix), 0, raw, 0, keyPrefix.length());
       System.arraycopy((byte[]) key, 0, raw, keyPrefix.length(), ((byte[]) key).length);
       processKey(raw);
       args.add(RawableFactory.from(raw));
