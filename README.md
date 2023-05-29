@@ -1,3 +1,17 @@
+# color-jedis
+客户端初始化时，增加配置统一前缀的功能。为应用增加统一前缀或者Redis多租户应用提供支持。
+Jedis客户端初始化
+```
+  Jedis jedis = new Jedis("127.0.0.1", 6379);
+  jedis.setKeyPrefix("common-prefix");
+```
+JedisCluster客户端初始化
+```
+  JedisCluster jedisCluster = new JedisCluster(HostAndPort.from("127.0.0.1:6379"));
+  jedisCluster.setKeyPrefix("common-prefix");
+```
+color-jedis支持的命令
+
 # Jedis
 
 [![Release](https://img.shields.io/github/release/redis/jedis.svg?sort=semver)](https://github.com/redis/jedis/releases/latest)
