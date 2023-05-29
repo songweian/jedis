@@ -11,6 +11,7 @@ JedisCluster客户端初始化
   jedisCluster.setKeyPrefix("common-prefix");
 ```
 参考分支```color```
+
 [color-jedis支持的命令](color-jedis.md)
 
 # Jedis
