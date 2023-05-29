@@ -34,6 +34,11 @@ import redis.clients.jedis.util.KeyValue;
 public class CommandObjects {
 
   private RedisProtocol proto;
+  private String keyPrefix;
+
+  protected void setKeyPrefix(String keyPrefix) {
+    this.keyPrefix = keyPrefix;
+  }
 
   protected void setProtocol(RedisProtocol proto) {
     this.proto = proto;
@@ -48,7 +53,7 @@ public class CommandObjects {
   }
 
   protected CommandArguments commandArguments(ProtocolCommand command) {
-    return new CommandArguments(command);
+    return new CommandArguments(command, this.keyPrefix);
   }
 
   private final CommandObject<String> PING_COMMAND_OBJECT = new CommandObject<>(commandArguments(PING), BuilderFactory.STRING);

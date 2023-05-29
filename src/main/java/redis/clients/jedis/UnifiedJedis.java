@@ -38,11 +38,12 @@ import redis.clients.jedis.util.IOUtils;
 import redis.clients.jedis.util.JedisURIHelper;
 import redis.clients.jedis.util.KeyValue;
 
-public class UnifiedJedis implements JedisCommands, JedisBinaryCommands,
+public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinaryCommands,
     SampleKeyedCommands, SampleBinaryKeyedCommands, RedisModuleCommands,
     AutoCloseable {
 
   protected RedisProtocol protocol = null;
+  protected String keyPrefix;
   protected final ConnectionProvider provider;
   protected final CommandExecutor executor;
   protected final CommandObjects commandObjects;
@@ -223,6 +224,12 @@ public class UnifiedJedis implements JedisCommands, JedisBinaryCommands,
   protected final void setProtocol(RedisProtocol protocol) {
     this.protocol = protocol;
     this.commandObjects.setProtocol(this.protocol);
+  }
+
+  @Override
+  public final void setKeyPrefix(String keyPrefix) {
+    this.keyPrefix = keyPrefix;
+    this.commandObjects.setKeyPrefix(this.keyPrefix);
   }
 
   public final <T> T executeCommand(CommandObject<T> commandObject) {

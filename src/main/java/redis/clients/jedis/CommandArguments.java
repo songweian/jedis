@@ -1,5 +1,6 @@
 package redis.clients.jedis;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -14,6 +15,8 @@ public class CommandArguments implements Iterable<Rawable> {
 
   private boolean blocking;
 
+  private final String keyPrefix;
+
   private CommandArguments() {
     throw new InstantiationError();
   }
@@ -21,6 +24,13 @@ public class CommandArguments implements Iterable<Rawable> {
   public CommandArguments(ProtocolCommand command) {
     args = new ArrayList<>();
     args.add(command);
+    this.keyPrefix = null;
+  }
+
+  public CommandArguments(ProtocolCommand command, String keyPrefix) {
+    args = new ArrayList<>();
+    args.add(command);
+    this.keyPrefix = keyPrefix;
   }
 
   public ProtocolCommand getCommand() {
@@ -57,16 +67,44 @@ public class CommandArguments implements Iterable<Rawable> {
   }
 
   public CommandArguments key(Object key) {
+    if (keyPrefix == null) {
+      key0(key);
+      return this;
+    }
     if (key instanceof Rawable) {
       Rawable raw = (Rawable) key;
       processKey(raw.getRaw());
       args.add(raw);
     } else if (key instanceof byte[]) {
-      byte[] raw = (byte[]) key;
+      byte[] raw = new byte[((byte[]) key).length + keyPrefix.length()];
+      System.arraycopy(keyPrefix.getBytes(StandardCharsets.UTF_8), 0, raw, 0, keyPrefix.length());
+      System.arraycopy((byte[]) key, 0, raw, keyPrefix.length(), ((byte[]) key).length);
       processKey(raw);
       args.add(RawableFactory.from(raw));
     } else if (key instanceof String) {
-      String raw = (String) key;
+      String raw = keyPrefix + (String) key;
+      processKey(raw);
+      args.add(RawableFactory.from(raw));
+    } else {
+      throw new IllegalArgumentException("\"" + key.toString() + "\" is not a valid argument.");
+    }
+    return this;
+  }
+
+  public CommandArguments key0(Object key) {
+    if (key instanceof Rawable) {
+      Rawable raw = (Rawable) key;
+      processKey(raw.getRaw());
+      args.add(raw);
+    } else if (key instanceof byte[]) {
+      byte[] arr = new byte[((byte[]) key).length + keyPrefix.length()];
+      System.arraycopy(keyPrefix.getBytes(StandardCharsets.UTF_8), 0, arr, 0, keyPrefix.length());
+      System.arraycopy((byte[]) key, 0, arr, keyPrefix.length(), ((byte[]) key).length);
+      byte[] raw = keyPrefix.getBytes(StandardCharsets.UTF_8);
+      processKey(raw);
+      args.add(RawableFactory.from(raw));
+    } else if (key instanceof String) {
+      String raw = keyPrefix + (String) key;
       processKey(raw);
       args.add(RawableFactory.from(raw));
     } else {

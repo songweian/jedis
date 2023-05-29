@@ -31,11 +31,12 @@ import redis.clients.jedis.util.JedisURIHelper;
 import redis.clients.jedis.util.KeyValue;
 import redis.clients.jedis.util.Pool;
 
-public class Jedis implements ServerCommands, DatabaseCommands, JedisCommands, JedisBinaryCommands,
+public class Jedis implements CommonKeyPrefix, ServerCommands, DatabaseCommands, JedisCommands, JedisBinaryCommands,
     ControlCommands, ControlBinaryCommands, ClusterCommands, ModuleCommands, GenericControlCommands,
     SentinelCommands, Closeable {
 
   protected final Connection connection;
+  protected String keyPrefix;
   private final CommandObjects commandObjects = new CommandObjects();
   private int db = 0;
   private Transaction transaction = null;
@@ -224,6 +225,12 @@ public class Jedis implements ServerCommands, DatabaseCommands, JedisCommands, J
 
   public Jedis(final Connection connection) {
     this.connection = connection;
+  }
+
+  @Override
+  public void setKeyPrefix(String keyPrefix) {
+    this.keyPrefix = keyPrefix;
+    this.commandObjects.setKeyPrefix(this.keyPrefix);
   }
 
   @Override
