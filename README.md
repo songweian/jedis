@@ -4,6 +4,9 @@
 * 应用增加统一前缀
 * Redis多租户应用
 
+## 使用方式
+### 替换到color-jedis
+### 原有初始化基础上，增加配置
 Jedis客户端初始化
 ```
   Jedis jedis = new Jedis("127.0.0.1", 6379);
@@ -14,7 +17,6 @@ JedisCluster客户端初始化
   JedisCluster jedisCluster = new JedisCluster(HostAndPort.from("127.0.0.1:6379"));
   jedisCluster.setKeyPrefix("common-prefix");
 ```
-参考分支```color```
 
 [color-jedis支持的命令](color-jedis.md)
 
