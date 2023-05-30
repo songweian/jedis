@@ -53,7 +53,7 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
 
   /**
    * Creates a new transaction.
-   * 
+   *
    * A MULTI command will be added to be sent to server. WATCH/UNWATCH/MULTI commands must not be
    * called with this object.
    * @param connection connection
@@ -708,7 +708,7 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   }
 
   @Override
-  public Response<KeyedListElement> blpop(double timeout, String key) {
+  public Response<KeyValue<String, String>> blpop(double timeout, String key) {
     return appendCommand(commandObjects.blpop(timeout, key));
   }
 
@@ -718,7 +718,7 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   }
 
   @Override
-  public Response<KeyedListElement> brpop(double timeout, String key) {
+  public Response<KeyValue<String, String>> brpop(double timeout, String key) {
     return appendCommand(commandObjects.brpop(timeout, key));
   }
 
@@ -728,7 +728,7 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   }
 
   @Override
-  public Response<KeyedListElement> blpop(double timeout, String... keys) {
+  public Response<KeyValue<String, String>> blpop(double timeout, String... keys) {
     return appendCommand(commandObjects.blpop(timeout, keys));
   }
 
@@ -738,7 +738,7 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   }
 
   @Override
-  public Response<KeyedListElement> brpop(double timeout, String... keys) {
+  public Response<KeyValue<String, String>> brpop(double timeout, String... keys) {
     return appendCommand(commandObjects.brpop(timeout, keys));
   }
 
@@ -1264,12 +1264,12 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   }
 
   @Override
-  public Response<KeyedZSetElement> bzpopmax(double timeout, String... keys) {
+  public Response<KeyValue<String, Tuple>> bzpopmax(double timeout, String... keys) {
     return appendCommand(commandObjects.bzpopmax(timeout, keys));
   }
 
   @Override
-  public Response<KeyedZSetElement> bzpopmin(double timeout, String... keys) {
+  public Response<KeyValue<String, Tuple>> bzpopmin(double timeout, String... keys) {
     return appendCommand(commandObjects.bzpopmin(timeout, keys));
   }
 
@@ -2484,7 +2484,7 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   }
 
   @Override
-  public Response<List<byte[]>> blpop(double timeout, byte[]... keys) {
+  public Response<KeyValue<byte[], byte[]>> blpop(double timeout, byte[]... keys) {
     return appendCommand(commandObjects.blpop(timeout, keys));
   }
 
@@ -2494,7 +2494,7 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   }
 
   @Override
-  public Response<List<byte[]>> brpop(double timeout, byte[]... keys) {
+  public Response<KeyValue<byte[], byte[]>> brpop(double timeout, byte[]... keys) {
     return appendCommand(commandObjects.brpop(timeout, keys));
   }
 
@@ -3013,12 +3013,12 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   }
 
   @Override
-  public Response<List<Object>> bzpopmax(double timeout, byte[]... keys) {
+  public Response<KeyValue<byte[], Tuple>> bzpopmax(double timeout, byte[]... keys) {
     return appendCommand(commandObjects.bzpopmax(timeout, keys));
   }
 
   @Override
-  public Response<List<Object>> bzpopmin(double timeout, byte[]... keys) {
+  public Response<KeyValue<byte[], Tuple>> bzpopmin(double timeout, byte[]... keys) {
     return appendCommand(commandObjects.bzpopmin(timeout, keys));
   }
 
@@ -3624,6 +3624,16 @@ public abstract class TransactionBase implements PipelineCommands, PipelineBinar
   @Override
   public Response<String> jsonSet(String key, Path path, Object object, JsonSetParams params) {
     return appendCommand(commandObjects.jsonSet(key, path, object, params));
+  }
+
+  @Override
+  public Response<String> jsonMerge(String key, Path2 path, Object object) {
+    return appendCommand(commandObjects.jsonMerge(key, path, object));
+  }
+
+  @Override
+  public Response<String> jsonMerge(String key, Path path, Object object) {
+    return appendCommand(commandObjects.jsonMerge(key, path, object));
   }
 
   @Override

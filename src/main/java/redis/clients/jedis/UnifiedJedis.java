@@ -203,6 +203,21 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   /**
+   * Constructor which supports multiple cluster/database endpoints each with their own isolated connection pool.
+   * <p>
+   * With this Constructor users can seamlessly failover to Disaster Recovery (DR), Backup, and Active-Active cluster(s)
+   * by using simple configuration which is passed through from Resilience4j - https://resilience4j.readme.io/docs
+   * <p>
+   */
+  public UnifiedJedis(MultiClusterPooledConnectionProvider provider) {
+    this.provider = provider;
+    this.executor = new CircuitBreakerCommandExecutor(provider);
+    this.commandObjects = new CommandObjects();
+    this.graphCommandObjects = new GraphCommandObjects(this);
+    this.graphCommandObjects.setBaseCommandArgumentsCreator((comm) -> this.commandObjects.commandArguments(comm));
+  }
+
+  /**
    * The constructor to use a custom {@link CommandExecutor}.
    * <p>
    * WARNING: Using this constructor means a {@link NullPointerException} will be occurred if
@@ -1237,7 +1252,7 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   @Override
-  public KeyedListElement blpop(double timeout, String key) {
+  public KeyValue<String, String> blpop(double timeout, String key) {
     return executeCommand(commandObjects.blpop(timeout, key));
   }
 
@@ -1247,7 +1262,7 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   @Override
-  public KeyedListElement brpop(double timeout, String key) {
+  public KeyValue<String, String> brpop(double timeout, String key) {
     return executeCommand(commandObjects.brpop(timeout, key));
   }
 
@@ -1257,7 +1272,7 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   @Override
-  public KeyedListElement blpop(double timeout, String... keys) {
+  public KeyValue<String, String> blpop(double timeout, String... keys) {
     return executeCommand(commandObjects.blpop(timeout, keys));
   }
 
@@ -1267,7 +1282,7 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   @Override
-  public KeyedListElement brpop(double timeout, String... keys) {
+  public KeyValue<String, String> brpop(double timeout, String... keys) {
     return executeCommand(commandObjects.brpop(timeout, keys));
   }
 
@@ -1277,7 +1292,7 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   @Override
-  public List<byte[]> blpop(double timeout, byte[]... keys) {
+  public KeyValue<byte[], byte[]> blpop(double timeout, byte[]... keys) {
     return executeCommand(commandObjects.blpop(timeout, keys));
   }
 
@@ -1287,7 +1302,7 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   @Override
-  public List<byte[]> brpop(double timeout, byte[]... keys) {
+  public KeyValue<byte[], byte[]> brpop(double timeout, byte[]... keys) {
     return executeCommand(commandObjects.brpop(timeout, keys));
   }
 
@@ -2338,22 +2353,22 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   @Override
-  public KeyedZSetElement bzpopmax(double timeout, String... keys) {
+  public KeyValue<String, Tuple> bzpopmax(double timeout, String... keys) {
     return executeCommand(commandObjects.bzpopmax(timeout, keys));
   }
 
   @Override
-  public KeyedZSetElement bzpopmin(double timeout, String... keys) {
+  public KeyValue<String, Tuple> bzpopmin(double timeout, String... keys) {
     return executeCommand(commandObjects.bzpopmin(timeout, keys));
   }
 
   @Override
-  public List<Object> bzpopmax(double timeout, byte[]... keys) {
+  public KeyValue<byte[], Tuple> bzpopmax(double timeout, byte[]... keys) {
     return executeCommand(commandObjects.bzpopmax(timeout, keys));
   }
 
   @Override
-  public List<Object> bzpopmin(double timeout, byte[]... keys) {
+  public KeyValue<byte[], Tuple> bzpopmin(double timeout, byte[]... keys) {
     return executeCommand(commandObjects.bzpopmin(timeout, keys));
   }
 
@@ -3895,6 +3910,16 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
 
   @Override
+  public String jsonMerge(String key, Path2 path, Object object) {
+    return executeCommand(commandObjects.jsonMerge(key, path, object));
+  }
+
+  @Override
+  public String jsonMerge(String key, Path path, Object pojo) {
+    return executeCommand(commandObjects.jsonMerge(key, path, pojo));
+  }
+
+  @Override
   public Object jsonGet(String key) {
     return executeCommand(commandObjects.jsonGet(key));
   }
@@ -4711,7 +4736,7 @@ public class UnifiedJedis implements CommonKeyPrefix, JedisCommands, JedisBinary
   }
   // RedisGraph commands
 
-  public Object pipelined() {
+  public PipelineBase pipelined() {
     if (provider == null) {
       throw new IllegalStateException("It is not allowed to create Pipeline from this " + getClass());
     }

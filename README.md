@@ -1,3 +1,19 @@
+# color-jedis
+客户端初始化时，增加配置统一前缀的功能。为应用增加统一前缀或者Redis多租户应用提供支持。
+Jedis客户端初始化
+```
+  Jedis jedis = new Jedis("127.0.0.1", 6379);
+  jedis.setKeyPrefix("common-prefix");
+```
+JedisCluster客户端初始化
+```
+  JedisCluster jedisCluster = new JedisCluster(HostAndPort.from("127.0.0.1:6379"));
+  jedisCluster.setKeyPrefix("common-prefix");
+```
+参考分支```color```
+
+[color-jedis支持的命令](color-jedis.md)
+
 # Jedis
 
 [![Release](https://img.shields.io/github/release/redis/jedis.svg?sort=semver)](https://github.com/redis/jedis/releases/latest)
@@ -107,6 +123,15 @@ Now you can use the `JedisCluster` instance and send commands like you would wit
 ```java
 jedis.sadd("planets", "Mars");
 ```
+
+## Failover
+
+Jedis supports retry and failover for your Redis deployments. This is useful when:
+
+1. You have more than one Redis deployment. This might include two independent Redis servers or two or more Redis databases replicated across multiple [active-active Redis Enterprise](https://docs.redis.com/latest/rs/databases/active-active/) clusters.
+2. You want your application to connect to one deployment at a time and to fail over to the next available deployment if the first deployment becomes unavailable.
+
+For the complete failover configuration options and examples, see the [Jedis failover docs](docs/failover.md).
 
 ## Documentation
 
