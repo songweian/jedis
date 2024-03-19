@@ -10,6 +10,7 @@ import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import redis.clients.jedis.args.*;
@@ -23,8 +24,6 @@ import redis.clients.jedis.util.AssertUtil;
 import redis.clients.jedis.util.JedisClusterTestUtil;
 import redis.clients.jedis.util.SafeEncoder;
 
-// SLOW
-// TODO: make it fast
 public class ClusterPipeliningTest {
 
   private static final String LOCAL_IP = "127.0.0.1";
@@ -36,13 +35,13 @@ public class ClusterPipeliningTest {
   private static Jedis node2;
   private static Jedis node3;
 
-  private HostAndPort nodeInfo1 = HostAndPorts.getClusterServers().get(0);
-  private HostAndPort nodeInfo2 = HostAndPorts.getClusterServers().get(1);
-  private HostAndPort nodeInfo3 = HostAndPorts.getClusterServers().get(2);
+  private static HostAndPort nodeInfo1 = HostAndPorts.getClusterServers().get(0);
+  private static HostAndPort nodeInfo2 = HostAndPorts.getClusterServers().get(1);
+  private static HostAndPort nodeInfo3 = HostAndPorts.getClusterServers().get(2);
   private Set<HostAndPort> nodes = new HashSet<>(Arrays.asList(nodeInfo1, nodeInfo2, nodeInfo3));
 
-  @Before
-  public void setUp() throws InterruptedException {
+  @BeforeClass
+  public static void setUp() throws InterruptedException {
     node1 = new Jedis(nodeInfo1);
     node1.auth("cluster");
     node1.flushAll();
@@ -81,19 +80,28 @@ public class ClusterPipeliningTest {
     JedisClusterTestUtil.waitForClusterReady(node1, node2, node3);
   }
 
+  @Before
+  public void prepare() {
+    node1.flushAll();
+    node2.flushAll();
+    node3.flushAll();
+  }
+
+  @After
+  public void cleanUp() {
+    node1.flushDB();
+    node2.flushDB();
+    node3.flushDB();
+  }
+
   @AfterClass
-  public static void cleanUp() {
+  public static void tearDown() throws InterruptedException {
     node1.flushDB();
     node2.flushDB();
     node3.flushDB();
     node1.clusterReset(ClusterResetType.SOFT);
     node2.clusterReset(ClusterResetType.SOFT);
     node3.clusterReset(ClusterResetType.SOFT);
-  }
-
-  @After
-  public void tearDown() throws InterruptedException {
-    cleanUp();
   }
 
   @Test
@@ -519,6 +527,7 @@ public class ClusterPipeliningTest {
     Response<Long> r1 = p.sadd("my{set}", "hello", "hello", "world", "foo", "bar");
     p.sadd("mynew{set}", "hello", "hello", "world");
     Response<Set<String>> r2 = p.sdiff("my{set}", "mynew{set}");
+    Response<Long> r3deprecated = p.sdiffStore("diffset{set}deprecated", "my{set}", "mynew{set}");
     Response<Long> r3 = p.sdiffstore("diffset{set}", "my{set}", "mynew{set}");
     Response<Set<String>> r4 = p.smembers("diffset{set}");
     Response<Set<String>> r5 = p.sinter("my{set}", "mynew{set}");
@@ -539,6 +548,7 @@ public class ClusterPipeliningTest {
     p.sync();
     assertEquals(Long.valueOf(4), r1.get());
     assertEquals(diff, r2.get());
+    assertEquals(Long.valueOf(diff.size()), r3deprecated.get());
     assertEquals(Long.valueOf(diff.size()), r3.get());
     assertEquals(diff, r4.get());
     assertEquals(inter, r5.get());
@@ -1052,5 +1062,41 @@ public class ClusterPipeliningTest {
     try (JedisCluster cluster = new JedisCluster(nodes, DEFAULT_CLIENT_CONFIG)) {
       assertThrows(UnsupportedOperationException.class, () -> cluster.multi());
     }
+  }
+
+  @Test(timeout = 10_000L)
+  public void multiple() {
+    final int maxTotal = 100;
+    ConnectionPoolConfig poolConfig = new ConnectionPoolConfig();
+    poolConfig.setMaxTotal(maxTotal);
+    try (JedisCluster cluster = new JedisCluster(nodes, DEFAULT_CLIENT_CONFIG, 5, poolConfig)) {
+      for (int i = 0; i < maxTotal; i++) {
+        assertThreadsCount();
+        String s = Integer.toString(i);
+        try (ClusterPipeline pipeline = cluster.pipelined()) {
+          pipeline.set(s, s);
+          pipeline.sync();
+        }
+        assertThreadsCount();
+      }
+    }
+  }
+
+  private static void assertThreadsCount() {
+    // Get the root thread group
+    final ThreadGroup rootGroup = Thread.currentThread().getThreadGroup().getParent();
+
+    // Create a buffer to store the thread information
+    final Thread[] threads = new Thread[rootGroup.activeCount()];
+
+    // Enumerate all threads into the buffer
+    rootGroup.enumerate(threads);
+
+    // Assert information about threads
+    final int count = (int) Arrays.stream(threads)
+        .filter(thread -> thread != null && thread.getName() != null
+            && thread.getName().startsWith("pool-"))
+        .count();
+    MatcherAssert.assertThat(count, Matchers.lessThanOrEqualTo(20));
   }
 }

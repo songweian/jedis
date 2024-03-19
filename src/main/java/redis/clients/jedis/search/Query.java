@@ -9,6 +9,7 @@ import redis.clients.jedis.CommandArguments;
 import redis.clients.jedis.Protocol;
 import redis.clients.jedis.params.IParams;
 import redis.clients.jedis.search.SearchProtocol.SearchKeyword;
+import redis.clients.jedis.util.LazyRawable;
 import redis.clients.jedis.util.SafeEncoder;
 
 /**
@@ -155,7 +156,7 @@ public class Query implements IParams {
   private boolean wantsSummarize = false;
   private String _scorer = null;
   private Map<String, Object> _params = null;
-  private int _dialect = 0;
+  private Integer _dialect;
   private int _slop = -1;
   private long _timeout = -1;
   private boolean _inOrder = false;
@@ -298,7 +299,7 @@ public class Query implements IParams {
       }
     }
 
-    if (_dialect != 0) {
+    if (_dialect != null) {
       args.add(SearchKeyword.DIALECT.getRaw());
       args.add(_dialect);
     }
@@ -540,6 +541,18 @@ public class Query implements IParams {
    */
   public Query dialect(int dialect) {
     _dialect = dialect;
+    return this;
+  }
+
+  /**
+   * This method will not replace the dialect if it has been already set.
+   * @param dialect dialect
+   * @return this
+   */
+  public Query dialectOptional(int dialect) {
+    if (dialect != 0 && this._dialect == null) {
+      this._dialect = dialect;
+    }
     return this;
   }
 

@@ -6,9 +6,10 @@ import java.util.Map;
 
 /**
  * This class holds information about an Access Control Log entry (returned by ACL LOG command) They
- * can be access via getters. For future purpose there is also {@link #getlogEntry} method that
+ * can be accessed via getters. For future purpose there is also {@link #getlogEntry} method that
  * returns a generic {@code Map} - in case where more info is returned from a server
  */
+// TODO: remove
 public class AccessControlLogEntry implements Serializable {
 
   private static final long serialVersionUID = 1L;

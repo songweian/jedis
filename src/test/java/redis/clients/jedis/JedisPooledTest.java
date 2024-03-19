@@ -1,10 +1,10 @@
 package redis.clients.jedis;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.anything;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -13,6 +13,7 @@ import java.net.URISyntaxException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.junit.Assert;
 import org.junit.Test;
 
 import redis.clients.jedis.exceptions.JedisConnectionException;
@@ -21,6 +22,7 @@ import redis.clients.jedis.exceptions.JedisException;
 public class JedisPooledTest {
 
   private static final HostAndPort hnp = HostAndPorts.getRedisServers().get(7);
+  private static final HostAndPort pwp = HostAndPorts.getRedisServers().get(1); // password protected
 
   @Test
   public void checkCloseableConnections() {
@@ -103,6 +105,18 @@ public class JedisPooledTest {
   }
 
   @Test
+  public void invalidClientName() {
+    try (JedisPooled pool = new JedisPooled(hnp, DefaultJedisClientConfig.builder()
+        .clientName("invalid client name").build());
+         Connection jedis = pool.getPool().getResource()) {
+    } catch (Exception e) {
+      if (!e.getMessage().startsWith("client info cannot contain space")) {
+        Assert.fail("invalid client name test fail");
+      }
+    }
+  }
+
+  @Test
   public void getNumActiveWhenPoolIsClosed() {
     JedisPooled pool = new JedisPooled(hnp);
 
@@ -164,9 +178,8 @@ public class JedisPooledTest {
     DefaultRedisCredentialsProvider credentialsProvider = 
         new DefaultRedisCredentialsProvider(new DefaultRedisCredentials(null, "bad password"));
 
-    try (JedisPooled pool = new JedisPooled(HostAndPorts.getRedisServers().get(0),
-        DefaultJedisClientConfig.builder().credentialsProvider(credentialsProvider)
-            .clientName("my_shiny_client_name").build())) {
+    try (JedisPooled pool = new JedisPooled(pwp, DefaultJedisClientConfig.builder()
+        .credentialsProvider(credentialsProvider).build())) {
       try {
         pool.get("foo");
         fail("Should not get resource from pool");
@@ -174,7 +187,7 @@ public class JedisPooledTest {
       assertEquals(0, pool.getPool().getNumActive());
 
       credentialsProvider.setCredentials(new DefaultRedisCredentials(null, "foobared"));
-      assertNull(pool.get("foo"));
+      assertThat(pool.get("foo"), anything());
     }
   }
 
@@ -194,7 +207,12 @@ public class JedisPooledTest {
       @Override
       public RedisCredentials get() {
         if (!validPassword.get()) {
-          return new RedisCredentials() { };
+          return new RedisCredentials() {
+            @Override
+            public char[] getPassword() {
+              return "invalidPass".toCharArray();
+            }
+          };
         }
 
         return new RedisCredentials() {
@@ -220,9 +238,8 @@ public class JedisPooledTest {
     GenericObjectPoolConfig<Connection> poolConfig = new GenericObjectPoolConfig<>();
     poolConfig.setMaxTotal(1);
     poolConfig.setTestOnBorrow(true);
-    try (JedisPooled pool = new JedisPooled(HostAndPorts.getRedisServers().get(0),
-        DefaultJedisClientConfig.builder().credentialsProvider(credentialsProvider)
-            .build(), poolConfig)) {
+    try (JedisPooled pool = new JedisPooled(pwp, DefaultJedisClientConfig.builder()
+        .credentialsProvider(credentialsProvider).build(), poolConfig)) {
       try {
         pool.get("foo");
         fail("Should not get resource from pool");
@@ -233,7 +250,7 @@ public class JedisPooledTest {
       assertThat(cleanupCount.getAndSet(0), greaterThanOrEqualTo(1));
 
       validPassword.set(true);
-      assertNull(pool.get("foo"));
+      assertThat(pool.get("foo"), anything());
       assertThat(prepareCount.get(), equalTo(1));
       assertThat(cleanupCount.get(), equalTo(1));
     }

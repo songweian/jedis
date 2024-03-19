@@ -94,13 +94,12 @@ public abstract class JedisShardedPubSubBase<T> {
           final T enmesg = (bmesg == null) ? null : encode(bmesg);
           onSMessage(enchannel, enmesg);
         } else {
-          System.out.println(redis.clients.jedis.util.SafeEncoder.encodeObject(resp));
           throw new JedisException("Unknown message type: " + firstObj);
         }
       } else {
         throw new JedisException("Unknown message type: " + reply);
       }
-    } while (isSubscribed());
+    } while (!Thread.currentThread().isInterrupted() && isSubscribed());
 
 //    /* Invalidate instance since this thread is no longer listening */
 //    this.client = null;

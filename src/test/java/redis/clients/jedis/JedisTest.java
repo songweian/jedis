@@ -17,6 +17,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import redis.clients.jedis.exceptions.InvalidURIException;
 import redis.clients.jedis.exceptions.JedisConnectionException;
@@ -24,7 +26,12 @@ import redis.clients.jedis.exceptions.JedisException;
 import redis.clients.jedis.commands.jedis.JedisCommandsTestBase;
 import redis.clients.jedis.util.SafeEncoder;
 
+@RunWith(Parameterized.class)
 public class JedisTest extends JedisCommandsTestBase {
+
+  public JedisTest(RedisProtocol protocol) {
+    super(protocol);
+  }
 
   @Test
   public void useWithoutConnecting() {
@@ -100,10 +107,12 @@ public class JedisTest extends JedisCommandsTestBase {
 
   @Test
   public void timeoutConnection() throws Exception {
+    final String TIMEOUT_STR = "timeout";
+
     Jedis jedis = new Jedis("localhost", 6379, 15000);
     jedis.auth("foobared");
     // read current config
-    final String timeout = jedis.configGet("timeout").get(1);
+    final String timeout = jedis.configGet(TIMEOUT_STR).get(TIMEOUT_STR);
     try {
       jedis.configSet("timeout", "1");
       Thread.sleep(5000);
@@ -118,7 +127,7 @@ public class JedisTest extends JedisCommandsTestBase {
       // reset config
       jedis = new Jedis("localhost", 6379);
       jedis.auth("foobared");
-      jedis.configSet("timeout", timeout);
+      jedis.configSet(TIMEOUT_STR, timeout);
       jedis.close();
     }
   }
@@ -284,6 +293,41 @@ public class JedisTest extends JedisCommandsTestBase {
   public void checkDisconnectOnQuit() {
     jedis.disconnect();
     assertFalse(jedis.isConnected());
+  }
+
+  @Test
+  public void clientSetInfoDefault() {
+    try (Jedis jedis = new Jedis(hnp, DefaultJedisClientConfig.builder().password("foobared")
+        .clientSetInfoConfig(ClientSetInfoConfig.DEFAULT).build())) {
+      assertEquals("PONG", jedis.ping());
+      String info = jedis.clientInfo();
+      assertTrue(info.contains("lib-name=" + JedisMetaInfo.getArtifactId()));
+      assertTrue(info.contains("lib-ver=" + JedisMetaInfo.getVersion()));
+    }
+  }
+
+  @Test
+  public void clientSetInfoDisabled() {
+    try (Jedis jedis = new Jedis(hnp, DefaultJedisClientConfig.builder().password("foobared")
+        .clientSetInfoConfig(ClientSetInfoConfig.DISABLED).build())) {
+      assertEquals("PONG", jedis.ping());
+      String info = jedis.clientInfo();
+      assertFalse(info.contains("lib-name=" + JedisMetaInfo.getArtifactId()));
+      assertFalse(info.contains("lib-ver=" + JedisMetaInfo.getVersion()));
+    }
+  }
+
+  @Test
+  public void clientSetInfoLibNameSuffix() {
+    final String libNameSuffix = "for-redis";
+    ClientSetInfoConfig setInfoConfig = ClientSetInfoConfig.withLibNameSuffix(libNameSuffix);
+    try (Jedis jedis = new Jedis(hnp, DefaultJedisClientConfig.builder().password("foobared")
+        .clientSetInfoConfig(setInfoConfig).build())) {
+      assertEquals("PONG", jedis.ping());
+      String info = jedis.clientInfo();
+      assertTrue(info.contains("lib-name=" + JedisMetaInfo.getArtifactId() + '(' + libNameSuffix + ')'));
+      assertTrue(info.contains("lib-ver=" + JedisMetaInfo.getVersion()));
+    }
   }
 
 }

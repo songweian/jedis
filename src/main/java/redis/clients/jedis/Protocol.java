@@ -10,6 +10,7 @@ import java.util.Locale;
 import redis.clients.jedis.exceptions.*;
 import redis.clients.jedis.args.Rawable;
 import redis.clients.jedis.commands.ProtocolCommand;
+import redis.clients.jedis.util.KeyValue;
 import redis.clients.jedis.util.RedisInputStream;
 import redis.clients.jedis.util.RedisOutputStream;
 import redis.clients.jedis.util.SafeEncoder;
@@ -53,6 +54,7 @@ public final class Protocol {
   private static final String CLUSTERDOWN_PREFIX = "CLUSTERDOWN ";
   private static final String BUSY_PREFIX = "BUSY ";
   private static final String NOSCRIPT_PREFIX = "NOSCRIPT ";
+  private static final String NOAUTH_PREFIX = "NOAUTH";
   private static final String WRONGPASS_PREFIX = "WRONGPASS";
   private static final String NOPERM_PREFIX = "NOPERM";
 
@@ -96,9 +98,9 @@ public final class Protocol {
       throw new JedisBusyException(message);
     } else if (message.startsWith(NOSCRIPT_PREFIX)) {
       throw new JedisNoScriptException(message);
-    } else if (message.startsWith(WRONGPASS_PREFIX)) {
-      throw new JedisAccessControlException(message);
-    } else if (message.startsWith(NOPERM_PREFIX)) {
+    } else if (message.startsWith(NOAUTH_PREFIX)
+        || message.startsWith(WRONGPASS_PREFIX)
+        || message.startsWith(NOPERM_PREFIX)) {
       throw new JedisAccessControlException(message);
     }
     throw new JedisDataException(message);
@@ -133,7 +135,6 @@ public final class Protocol {
   private static Object process(final RedisInputStream is) {
     final byte b = is.readByte();
     //System.out.println((char) b);
-    int num;
     switch (b) {
       case PLUS_BYTE:
         return is.readLineBytes();
@@ -141,9 +142,7 @@ public final class Protocol {
       case EQUAL_BYTE:
         return processBulkReply(is);
       case ASTERISK_BYTE:
-        num = is.readIntCrLf();
-        if (num == -1) return null;
-        return processMultiBulkReply(num, is);
+        return processMultiBulkReply(is);
       case UNDERSCORE_BYTE:
         return is.readNullCrLf();
       case HASH_BYTE:
@@ -155,17 +154,11 @@ public final class Protocol {
       case LEFT_BRACE_BYTE:
         return is.readBigIntegerCrLf();
       case PERCENT_BYTE: // TODO: currently just to start working with HELLO
-        num = is.readIntCrLf();
-        if (num == -1) return null;
-        return processMultiBulkReply(2 * num, is);
+        return processMapKeyValueReply(is);
       case TILDE_BYTE: // TODO:
-        num = is.readIntCrLf();
-        if (num == -1) return null;
-        return processMultiBulkReply(num, is);
+        return processMultiBulkReply(is);
       case GREATER_THAN_BYTE:
-        num = is.readIntCrLf();
-        if (num == -1) return null;
-        return processMultiBulkReply(num, is);
+        return processMultiBulkReply(is);
       case MINUS_BYTE:
         processError(is);
         return null;
@@ -198,9 +191,10 @@ public final class Protocol {
     return read;
   }
 
-  // private static List<Object> processMultiBulkReply(final RedisInputStream is) {
-  private static List<Object> processMultiBulkReply(final int num, final RedisInputStream is) {
-    // final int num = is.readIntCrLf();
+  private static List<Object> processMultiBulkReply(final RedisInputStream is) {
+  // private static List<Object> processMultiBulkReply(final int num, final RedisInputStream is) {
+    final int num = is.readIntCrLf();
+    if (num == -1) return null;
     final List<Object> ret = new ArrayList<>(num);
     for (int i = 0; i < num; i++) {
       try {
@@ -208,6 +202,18 @@ public final class Protocol {
       } catch (JedisDataException e) {
         ret.add(e);
       }
+    }
+    return ret;
+  }
+
+  // private static List<Object> processMultiBulkReply(final RedisInputStream is) {
+  // private static List<Object> processMultiBulkReply(final int num, final RedisInputStream is) {
+  private static List<KeyValue> processMapKeyValueReply(final RedisInputStream is) {
+    final int num = is.readIntCrLf();
+    if (num == -1) return null;
+    final List<KeyValue> ret = new ArrayList<>(num);
+    for (int i = 0; i < num; i++) {
+      ret.add(new KeyValue(process(is), process(is)));
     }
     return ret;
   }
@@ -267,7 +273,7 @@ public final class Protocol {
     SSUBSCRIBE, SUNSUBSCRIBE, SPUBLISH, // <-- pub sub
     SAVE, BGSAVE, BGREWRITEAOF, LASTSAVE, PERSIST, ROLE, FAILOVER, SLOWLOG, OBJECT, CLIENT, TIME,
     SCAN, HSCAN, SSCAN, ZSCAN, WAIT, CLUSTER, ASKING, READONLY, READWRITE, SLAVEOF, REPLICAOF, COPY,
-    SENTINEL, MODULE, ACL, TOUCH, MEMORY, LOLWUT, COMMAND, LATENCY, WAITAOF;
+    SENTINEL, MODULE, ACL, TOUCH, MEMORY, LOLWUT, COMMAND, RESET, LATENCY, WAITAOF;
 
     private final byte[] raw;
 
@@ -293,9 +299,9 @@ public final class Protocol {
     REV, WITHCOORD, WITHDIST, WITHHASH, ANY, FROMMEMBER, FROMLONLAT, BYRADIUS, BYBOX, BYLEX, BYSCORE,
     STOREDIST, TO, FORCE, TIMEOUT, DB, UNLOAD, ABORT, IDX, MINMATCHLEN, WITHMATCHLEN, FULL,
     DELETE, LIBRARYNAME, WITHCODE, DESCRIPTION, GETKEYS, GETKEYSANDFLAGS, DOCS, FILTERBY, DUMP,
-    MODULE, ACLCAT, PATTERN, DOCTOR, USAGE, SAMPLES, PURGE, STATS, LOADEX, CONFIG, ARGS, RANK,
+    MODULE, ACLCAT, PATTERN, DOCTOR, LATEST, HISTORY, USAGE, SAMPLES, PURGE, STATS, LOADEX, CONFIG, ARGS, RANK,
     NOW, VERSION, ADDR, SKIPME, USER, LADDR,
-    CHANNELS, NUMPAT, NUMSUB, SHARDCHANNELS, SHARDNUMSUB;
+    CHANNELS, NUMPAT, NUMSUB, SHARDCHANNELS, SHARDNUMSUB, NOVALUES, MAXAGE;
 
     private final byte[] raw;
 
@@ -352,7 +358,7 @@ public final class Protocol {
     MEET, RESET, INFO, FAILOVER, SLOTS, NODES, REPLICAS, SLAVES, MYID, ADDSLOTS, DELSLOTS,
     GETKEYSINSLOT, SETSLOT, NODE, MIGRATING, IMPORTING, STABLE, FORGET, FLUSHSLOTS, KEYSLOT,
     COUNTKEYSINSLOT, SAVECONFIG, REPLICATE, LINKS, ADDSLOTSRANGE, DELSLOTSRANGE, BUMPEPOCH,
-    MYSHARDID;
+    MYSHARDID, SHARDS;
 
     private final byte[] raw;
 

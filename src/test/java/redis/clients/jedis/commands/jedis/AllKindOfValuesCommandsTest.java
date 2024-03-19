@@ -1,5 +1,6 @@
 package redis.clients.jedis.commands.jedis;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.*;
 
 import static redis.clients.jedis.Protocol.Command.BLPOP;
@@ -14,10 +15,15 @@ import static redis.clients.jedis.params.ScanParams.SCAN_POINTER_START;
 import static redis.clients.jedis.params.ScanParams.SCAN_POINTER_START_BINARY;
 
 import java.util.*;
+import org.hamcrest.Matchers;
+import org.junit.Assume;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import redis.clients.jedis.HostAndPort;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.Transaction;
 import redis.clients.jedis.args.ExpiryOption;
 import redis.clients.jedis.params.ScanParams;
 import redis.clients.jedis.resps.ScanResult;
@@ -25,11 +31,14 @@ import redis.clients.jedis.StreamEntryID;
 import redis.clients.jedis.args.FlushMode;
 import redis.clients.jedis.params.RestoreParams;
 import redis.clients.jedis.HostAndPorts;
+import redis.clients.jedis.RedisProtocol;
 import redis.clients.jedis.util.SafeEncoder;
 import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.params.SetParams;
 import redis.clients.jedis.util.AssertUtil;
+import redis.clients.jedis.util.KeyValue;
 
+@RunWith(Parameterized.class)
 public class AllKindOfValuesCommandsTest extends JedisCommandsTestBase {
   final byte[] bfoo = { 0x01, 0x02, 0x03, 0x04 };
   final byte[] bfoo1 = { 0x01, 0x02, 0x03, 0x04, 0x0A };
@@ -49,6 +58,10 @@ public class AllKindOfValuesCommandsTest extends JedisCommandsTestBase {
   final int expireSeconds = 2;
 
   private static final HostAndPort lfuHnp = HostAndPorts.getRedisServers().get(7);
+
+  public AllKindOfValuesCommandsTest(RedisProtocol redisProtocol) {
+    super(redisProtocol);
+  }
 
   @Test
   public void ping() {
@@ -971,17 +984,60 @@ public class AllKindOfValuesCommandsTest extends JedisCommandsTestBase {
   }
 
   @Test
-  public void encodeCompleteResponse() {
+  public void encodeCompleteResponsePing() {
+    assertEquals("PONG", SafeEncoder.encodeObject(jedis.sendCommand(PING)));
+  }
+
+  @Test
+  public void encodeCompleteResponseHgetall() {
+    Assume.assumeFalse(protocol == RedisProtocol.RESP3);
+
+    HashMap<String, String> entries = new HashMap<>();
+    entries.put("foo", "bar");
+    entries.put("foo2", "bar2");
+    jedis.hset("hash:test:encode", entries);
+
+    List encodeObj = (List) SafeEncoder.encodeObject(jedis.sendCommand(HGETALL, "hash:test:encode"));
+
+    assertEquals(4, encodeObj.size());
+    entries.forEach((k, v) -> {
+      assertThat((Iterable<String>) encodeObj, Matchers.hasItem(k));
+      assertEquals(v, findValueFromMapAsList(encodeObj, k));
+    });
+  }
+
+  @Test
+  public void encodeCompleteResponseHgetallResp3() {
+    Assume.assumeTrue(protocol == RedisProtocol.RESP3);
+
+    HashMap<String, String> entries = new HashMap<>();
+    entries.put("foo", "bar");
+    entries.put("foo2", "bar2");
+    jedis.hset("hash:test:encode", entries);
+
+    List<KeyValue> encodeObj = (List<KeyValue>) SafeEncoder.encodeObject(jedis.sendCommand(HGETALL, "hash:test:encode"));
+
+    assertEquals(2, encodeObj.size());
+    encodeObj.forEach(kv -> {
+      assertThat(entries, Matchers.hasEntry(kv.getKey(), kv.getValue()));
+    });
+  }
+
+  @Test
+  public void encodeCompleteResponseXinfoStream() {
+    Assume.assumeFalse(protocol == RedisProtocol.RESP3);
+
     HashMap<String, String> entry = new HashMap<>();
     entry.put("foo", "bar");
     StreamEntryID entryID = jedis.xadd("mystream", StreamEntryID.NEW_ENTRY, entry);
     jedis.xgroupCreate("mystream", "mygroup", null, false);
 
     Object obj = jedis.sendCommand(XINFO, "STREAM", "mystream");
+
     List encodeObj = (List) SafeEncoder.encodeObject(obj);
 
-    assertTrue(encodeObj.size() >= 14);
-    assertEquals(0, encodeObj.size() % 2); // must be even
+    assertThat(encodeObj.size(), Matchers.greaterThanOrEqualTo(14));
+    assertEquals("must have even number of elements", 0, encodeObj.size() % 2); // must be even
 
     assertEquals(1L, findValueFromMapAsList(encodeObj, "length"));
     assertEquals(entryID.toString(), findValueFromMapAsList(encodeObj, "last-generated-id"));
@@ -992,22 +1048,47 @@ public class AllKindOfValuesCommandsTest extends JedisCommandsTestBase {
 
     assertEquals(entryAsList, ((List) findValueFromMapAsList(encodeObj, "first-entry")).get(1));
     assertEquals(entryAsList, ((List) findValueFromMapAsList(encodeObj, "last-entry")).get(1));
+  }
 
-    assertEquals("PONG", SafeEncoder.encodeObject(jedis.sendCommand(PING)));
+  @Test
+  public void encodeCompleteResponseXinfoStreamResp3() {
+    Assume.assumeTrue(protocol == RedisProtocol.RESP3);
 
-    entry.put("foo2", "bar2");
-    jedis.hset("hash:test:encode", entry);
-    encodeObj = (List) SafeEncoder.encodeObject(jedis.sendCommand(HGETALL, "hash:test:encode"));
+    HashMap<String, String> entry = new HashMap<>();
+    entry.put("foo", "bar");
+    StreamEntryID entryID = jedis.xadd("mystream", StreamEntryID.NEW_ENTRY, entry);
+    jedis.xgroupCreate("mystream", "mygroup", null, false);
 
-    assertEquals(4, encodeObj.size());
-    assertTrue(encodeObj.contains("foo"));
-    assertTrue(encodeObj.contains("foo2"));
+    Object obj = jedis.sendCommand(XINFO, "STREAM", "mystream");
+
+    List<KeyValue> encodeObj = (List<KeyValue>) SafeEncoder.encodeObject(obj);
+
+    assertThat(encodeObj.size(), Matchers.greaterThanOrEqualTo(7));
+
+    assertEquals(1L, findValueFromMapAsKeyValueList(encodeObj, "length"));
+    assertEquals(entryID.toString(), findValueFromMapAsKeyValueList(encodeObj, "last-generated-id"));
+
+    List<String> entryAsList = new ArrayList<>(2);
+    entryAsList.add("foo");
+    entryAsList.add("bar");
+
+    assertEquals(entryAsList, ((List) findValueFromMapAsKeyValueList(encodeObj, "first-entry")).get(1));
+    assertEquals(entryAsList, ((List) findValueFromMapAsKeyValueList(encodeObj, "last-entry")).get(1));
   }
 
   private Object findValueFromMapAsList(List list, Object key) {
     for (int i = 0; i < list.size(); i += 2) {
       if (key.equals(list.get(i))) {
         return list.get(i + 1);
+      }
+    }
+    return null;
+  }
+
+  private Object findValueFromMapAsKeyValueList(List<KeyValue> list, Object key) {
+    for (KeyValue kv : list) {
+      if (key.equals(kv.getKey())) {
+        return kv.getValue();
       }
     }
     return null;
@@ -1049,5 +1130,33 @@ public class AllKindOfValuesCommandsTest extends JedisCommandsTestBase {
     jedis.set(bfoo1, bbar1);
     assertTrue(jedis.copy(bfoo1, bfoo2, true));
     assertArrayEquals(bbar1, jedis.get(bfoo2));
+  }
+
+  @Test
+  public void reset() {
+    // response test
+    String status = jedis.reset();
+    assertEquals("RESET", status);
+
+    // auth reset
+    String counter = "counter";
+    Exception ex1 = assertThrows(JedisDataException.class, () -> {
+      jedis.set(counter, "1");
+    });
+    assertEquals("NOAUTH Authentication required.", ex1.getMessage());
+
+    // multi reset
+    jedis.auth("foobared");
+    jedis.set(counter, "1");
+
+    Transaction trans = jedis.multi();
+    trans.incr(counter);
+    jedis.reset();
+
+    Exception ex2 = assertThrows(JedisDataException.class, trans::exec);
+    assertEquals("EXECABORT Transaction discarded because of: NOAUTH Authentication required.", ex2.getMessage());
+
+    jedis.auth("foobared");
+    assertEquals("1", jedis.get(counter));
   }
 }

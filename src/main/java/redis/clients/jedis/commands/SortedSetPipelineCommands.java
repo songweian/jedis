@@ -135,27 +135,33 @@ public interface SortedSetPipelineCommands {
 
   Response<KeyValue<String, Tuple>> bzpopmin(double timeout, String... keys);
 
-  Response<Set<String>> zdiff(String... keys);
+  Response<List<String>> zdiff(String... keys);
 
-  Response<Set<Tuple>> zdiffWithScores(String... keys);
+  Response<List<Tuple>> zdiffWithScores(String... keys);
 
+  /**
+   * @deprecated Use {@link #zdiffstore(java.lang.String, java.lang.String...)}.
+   */
+  @Deprecated
   Response<Long> zdiffStore(String dstKey, String... keys);
+
+  Response<Long> zdiffstore(String dstKey, String... keys);
 
   Response<Long> zinterstore(String dstKey, String... sets);
 
   Response<Long> zinterstore(String dstKey, ZParams params, String... sets);
 
-  Response<Set<String>> zinter(ZParams params, String... keys);
+  Response<List<String>> zinter(ZParams params, String... keys);
 
-  Response<Set<Tuple>> zinterWithScores(ZParams params, String... keys);
+  Response<List<Tuple>> zinterWithScores(ZParams params, String... keys);
 
   Response<Long> zintercard(String... keys);
 
   Response<Long> zintercard(long limit, String... keys);
 
-  Response<Set<String>> zunion(ZParams params, String... keys);
+  Response<List<String>> zunion(ZParams params, String... keys);
 
-  Response<Set<Tuple>> zunionWithScores(ZParams params, String... keys);
+  Response<List<Tuple>> zunionWithScores(ZParams params, String... keys);
 
   Response<Long> zunionstore(String dstKey, String... sets);
 
@@ -165,7 +171,7 @@ public interface SortedSetPipelineCommands {
 
   Response<KeyValue<String, List<Tuple>>> zmpop(SortedSetOption option, int count, String... keys);
 
-  Response<KeyValue<String, List<Tuple>>> bzmpop(long timeout, SortedSetOption option, String... keys);
+  Response<KeyValue<String, List<Tuple>>> bzmpop(double timeout, SortedSetOption option, String... keys);
 
-  Response<KeyValue<String, List<Tuple>>> bzmpop(long timeout, SortedSetOption option, int count, String... keys);
+  Response<KeyValue<String, List<Tuple>>> bzmpop(double timeout, SortedSetOption option, int count, String... keys);
 }

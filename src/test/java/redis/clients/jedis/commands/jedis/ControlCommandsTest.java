@@ -24,23 +24,34 @@ import java.util.concurrent.TimeUnit;
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import redis.clients.jedis.DefaultJedisClientConfig;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisMonitor;
 import redis.clients.jedis.Protocol;
+import redis.clients.jedis.RedisProtocol;
 import redis.clients.jedis.args.ClientPauseMode;
+import redis.clients.jedis.args.LatencyEvent;
 import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.HostAndPorts;
 import redis.clients.jedis.params.CommandListFilterByParams;
 import redis.clients.jedis.params.LolwutParams;
 import redis.clients.jedis.resps.CommandDocument;
 import redis.clients.jedis.resps.CommandInfo;
+import redis.clients.jedis.resps.LatencyHistoryInfo;
+import redis.clients.jedis.resps.LatencyLatestInfo;
 import redis.clients.jedis.util.AssertUtil;
 import redis.clients.jedis.util.KeyValue;
 import redis.clients.jedis.util.SafeEncoder;
 
+@RunWith(Parameterized.class)
 public class ControlCommandsTest extends JedisCommandsTestBase {
+
+  public ControlCommandsTest(RedisProtocol redisProtocol) {
+    super(redisProtocol);
+  }
 
   @Test
   public void save() {
@@ -207,21 +218,23 @@ public class ControlCommandsTest extends JedisCommandsTestBase {
 
   @Test
   public void configGet() {
-    List<String> info = jedis.configGet("m*");
+    Map<String, String> info = jedis.configGet("m*");
     assertNotNull(info);
     assertFalse(info.isEmpty());
-    assertTrue(info.size() % 2 == 0);
-    List<byte[]> infoBinary = jedis.configGet("m*".getBytes());
+//    assertTrue(info.size() % 2 == 0);
+    Map<byte[], byte[]> infoBinary = jedis.configGet("m*".getBytes());
     assertNotNull(infoBinary);
     assertFalse(infoBinary.isEmpty());
-    assertTrue(infoBinary.size() % 2 == 0);
+//    assertTrue(infoBinary.size() % 2 == 0);
   }
 
   @Test
   public void configSet() {
-    List<String> info = jedis.configGet("maxmemory");
-    assertEquals("maxmemory", info.get(0));
-    String memory = info.get(1);
+    Map<String, String> info = jedis.configGet("maxmemory");
+//    assertEquals("maxmemory", info.get(0));
+//    String memory = info.get(1);
+    String memory = info.get("maxmemory");
+    assertNotNull(memory);
     assertEquals("OK", jedis.configSet("maxmemory", "200"));
     assertEquals("OK", jedis.configSet("maxmemory", memory));
   }
@@ -229,9 +242,11 @@ public class ControlCommandsTest extends JedisCommandsTestBase {
   @Test
   public void configSetBinary() {
     byte[] maxmemory = SafeEncoder.encode("maxmemory");
-    List<byte[]> info = jedis.configGet(maxmemory);
-    assertArrayEquals(maxmemory, info.get(0));
-    byte[] memory = info.get(1);
+    Map<byte[], byte[]> info = jedis.configGet(maxmemory);
+//    assertArrayEquals(maxmemory, info.get(0));
+//    byte[] memory = info.get(1);
+    byte[] memory = info.get(maxmemory);
+    assertNotNull(memory);
     assertEquals("OK", jedis.configSet(maxmemory, Protocol.toByteArray(200)));
     assertEquals("OK", jedis.configSet(maxmemory, memory));
   }
@@ -239,15 +254,15 @@ public class ControlCommandsTest extends JedisCommandsTestBase {
   @Test
   public void configGetSetMulti() {
     String[] params = new String[]{"hash-max-listpack-entries", "set-max-intset-entries", "zset-max-listpack-entries"};
-    List<String> info = jedis.configGet(params);
-    assertEquals(6, info.size());
-    assertEquals("OK", jedis.configSet(info.toArray(new String[6])));
+    Map<String, String> info = jedis.configGet(params);
+    assertEquals(3, info.size());
+    assertEquals("OK", jedis.configSet(info));
 
     byte[][] bparams = new byte[][]{SafeEncoder.encode("hash-max-listpack-entries"),
       SafeEncoder.encode("set-max-intset-entries"), SafeEncoder.encode("zset-max-listpack-entries")};
-    List<byte[]> binfo = jedis.configGet(bparams);
-    assertEquals(6, binfo.size());
-    assertEquals("OK", jedis.configSet(binfo.toArray(new byte[6][])));
+    Map<byte[], byte[]> binfo = jedis.configGet(bparams);
+    assertEquals(3, binfo.size());
+    assertEquals("OK", jedis.configSetBinary(binfo));
   }
 
   @Test
@@ -434,6 +449,23 @@ public class ControlCommandsTest extends JedisCommandsTestBase {
   public void latencyDoctor() {
     String report = jedis.latencyDoctor();
     assertNotNull(report);
+  }
+
+  @Test
+  public void latencyLatest() {
+    Map<String, LatencyLatestInfo> report = jedis.latencyLatest();
+    assertNotNull(report);
+  }
+
+  @Test
+  public void latencyHistoryFork() {
+    List<LatencyHistoryInfo> report = jedis.latencyHistory(LatencyEvent.FORK);
+    assertNotNull(report);
+  }
+
+  @Test
+  public void latencyReset() {
+    assertTrue(jedis.latencyReset() >= 0);
   }
 
   @Test

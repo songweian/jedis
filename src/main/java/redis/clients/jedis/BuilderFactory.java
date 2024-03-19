@@ -63,19 +63,6 @@ public final class BuilderFactory {
     }
   };
 
-  public static final Builder<Map<String, Object>> ENCODED_OBJECT_MAP = new Builder<Map<String, Object>>() {
-    @Override
-    public Map<String, Object> build(Object data) {
-      final List list = (List) data;
-      final Map<String, Object> map = new HashMap<>(list.size() / 2, 1f);
-      final Iterator iterator = list.iterator();
-      while (iterator.hasNext()) {
-        map.put(STRING.build(iterator.next()), ENCODED_OBJECT.build(iterator.next()));
-      }
-      return map;
-    }
-  };
-
   public static final Builder<Long> LONG = new Builder<Long>() {
     @Override
     public Long build(Object data) {
@@ -221,26 +208,6 @@ public final class BuilderFactory {
     }
   };
 
-  public static final Builder<Map<byte[], byte[]>> BINARY_MAP = new Builder<Map<byte[], byte[]>>() {
-    @Override
-    @SuppressWarnings("unchecked")
-    public Map<byte[], byte[]> build(Object data) {
-      final List<byte[]> flatHash = (List<byte[]>) data;
-      final Map<byte[], byte[]> hash = new JedisByteHashMap();
-      final Iterator<byte[]> iterator = flatHash.iterator();
-      while (iterator.hasNext()) {
-        hash.put(iterator.next(), iterator.next());
-      }
-
-      return hash;
-    }
-
-    @Override
-    public String toString() {
-      return "Map<byte[], byte[]>";
-    }
-  };
-
   public static final Builder<List<Map.Entry<byte[], byte[]>>> BINARY_PAIR_LIST
       = new Builder<List<Map.Entry<byte[], byte[]>>>() {
     @Override
@@ -323,18 +290,34 @@ public final class BuilderFactory {
     }
   };
 
-  public static final Builder<Set<String>> STRING_ORDERED_SET = new Builder<Set<String>>() {
+  public static final Builder<Map<byte[], byte[]>> BINARY_MAP = new Builder<Map<byte[], byte[]>>() {
     @Override
     @SuppressWarnings("unchecked")
-    public Set<String> build(Object data) {
-      if (null == data) return null;
-      return ((List<Object>) data).stream().map(STRING::build)
-          .collect(Collectors.toCollection(LinkedHashSet::new));
+    public Map<byte[], byte[]> build(Object data) {
+      final List<Object> list = (List<Object>) data;
+      if (list.isEmpty()) return Collections.emptyMap();
+
+      if (list.get(0) instanceof KeyValue) {
+        final Map<byte[], byte[]> map = new JedisByteHashMap();
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          KeyValue kv = (KeyValue) iterator.next();
+          map.put(BINARY.build(kv.getKey()), BINARY.build(kv.getValue()));
+        }
+        return map;
+      } else {
+        final Map<byte[], byte[]> map = new JedisByteHashMap();
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          map.put(BINARY.build(iterator.next()), BINARY.build(iterator.next()));
+        }
+        return map;
+      }
     }
 
     @Override
     public String toString() {
-      return "Set<String>";
+      return "Map<byte[], byte[]>";
     }
   };
 
@@ -342,19 +325,87 @@ public final class BuilderFactory {
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, String> build(Object data) {
-      final List<byte[]> flatHash = (List<byte[]>) data;
-      final Map<String, String> hash = new HashMap<>(flatHash.size() / 2, 1f);
-      final Iterator<byte[]> iterator = flatHash.iterator();
-      while (iterator.hasNext()) {
-        hash.put(SafeEncoder.encode(iterator.next()), SafeEncoder.encode(iterator.next()));
-      }
+      final List<Object> list = (List<Object>) data;
+      if (list.isEmpty()) return Collections.emptyMap();
 
-      return hash;
+      if (list.get(0) instanceof KeyValue) {
+        final Map<String, String> map = new HashMap<>(list.size(), 1f);
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          KeyValue kv = (KeyValue) iterator.next();
+          map.put(STRING.build(kv.getKey()), STRING.build(kv.getValue()));
+        }
+        return map;
+      } else {
+        final Map<String, String> map = new HashMap<>(list.size() / 2, 1f);
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          map.put(STRING.build(iterator.next()), STRING.build(iterator.next()));
+        }
+        return map;
+      }
     }
 
     @Override
     public String toString() {
       return "Map<String, String>";
+    }
+  };
+
+  public static final Builder<Map<String, Object>> ENCODED_OBJECT_MAP = new Builder<Map<String, Object>>() {
+    @Override
+    public Map<String, Object> build(Object data) {
+      if (data == null) return null;
+      final List<Object> list = (List<Object>) data;
+      if (list.isEmpty()) return Collections.emptyMap();
+
+      if (list.get(0) instanceof KeyValue) {
+        final Map<String, Object> map = new HashMap<>(list.size(), 1f);
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          KeyValue kv = (KeyValue) iterator.next();
+          map.put(STRING.build(kv.getKey()), ENCODED_OBJECT.build(kv.getValue()));
+        }
+        return map;
+      } else {
+        final Map<String, Object> map = new HashMap<>(list.size() / 2, 1f);
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          map.put(STRING.build(iterator.next()), ENCODED_OBJECT.build(iterator.next()));
+        }
+        return map;
+      }
+    }
+  };
+
+  public static final Builder<Object> AGGRESSIVE_ENCODED_OBJECT = new Builder<Object>() {
+    @Override
+    public Object build(Object data) {
+      if (data == null) return null;
+
+      if (data instanceof List) {
+        final List list = (List) data;
+        if (list.isEmpty()) return Collections.emptyMap();
+
+        if (list.get(0) instanceof KeyValue) {
+          return ((List<KeyValue>) data).stream()
+              .filter(kv -> kv != null && kv.getKey() != null && kv.getValue() != null)
+              .collect(Collectors.toMap(kv -> STRING.build(kv.getKey()),
+                  kv -> this.build(kv.getValue())));
+        } else {
+          return list.stream().map(this::build).collect(Collectors.toList());
+        }
+      } else if (data instanceof byte[]) {
+        return STRING.build(data);
+      }
+      return data;
+    }
+  };
+
+  public static final Builder<Map<String, Object>> AGGRESSIVE_ENCODED_OBJECT_MAP = new Builder<Map<String, Object>>() {
+    @Override
+    public Map<String, Object> build(Object data) {
+      return (Map<String, Object>) AGGRESSIVE_ENCODED_OBJECT.build(data);
     }
   };
 
@@ -392,6 +443,37 @@ public final class BuilderFactory {
     @Override
     public String toString() {
       return "List<Map.Entry<String, String>>";
+    }
+  };
+
+  public static final Builder<Map<String, Long>> STRING_LONG_MAP = new Builder<Map<String, Long>>() {
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, Long> build(Object data) {
+      final List<Object> list = (List<Object>) data;
+      if (list.isEmpty()) return Collections.emptyMap();
+
+      if (list.get(0) instanceof KeyValue) {
+        final Map<String, Long> map = new LinkedHashMap<>(list.size(), 1f);
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          KeyValue kv = (KeyValue) iterator.next();
+          map.put(STRING.build(kv.getKey()), LONG.build(kv.getValue()));
+        }
+        return map;
+      } else {
+        final Map<String, Long> map = new LinkedHashMap<>(list.size() / 2, 1f);
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          map.put(STRING.build(iterator.next()), LONG.build(iterator.next()));
+        }
+        return map;
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "Map<String, Long>";
     }
   };
 
@@ -867,20 +949,26 @@ public final class BuilderFactory {
   public static final Builder<Map<String, CommandDocument>> COMMAND_DOCS_RESPONSE = new Builder<Map<String, CommandDocument>>() {
     @Override
     public Map<String, CommandDocument> build(Object data) {
-      if (data == null) {
-        return null;
-      }
-
+      if (data == null) return null;
       List<Object> list = (List<Object>) data;
-      Map<String, CommandDocument> map = new HashMap<>(list.size() / 2, 1f);
+      if (list.isEmpty()) return Collections.emptyMap();
 
-      for (int i = 0; i < list.size();) {
-        String name = STRING.build(list.get(i++));
-        CommandDocument doc = CommandDocument.COMMAND_DOCUMENT_BUILDER.build(list.get(i++));
-        map.put(name, doc);
+      if (list.get(0) instanceof KeyValue) {
+        final Map<String, CommandDocument> map = new HashMap<>(list.size(), 1f);
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          KeyValue kv = (KeyValue) iterator.next();
+          map.put(STRING.build(kv.getKey()), new CommandDocument(ENCODED_OBJECT_MAP.build(kv.getValue())));
+        }
+        return map;
+      } else {
+        final Map<String, CommandDocument> map = new HashMap<>(list.size() / 2, 1f);
+        final Iterator iterator = list.iterator();
+        while (iterator.hasNext()) {
+          map.put(STRING.build(iterator.next()), new CommandDocument(ENCODED_OBJECT_MAP.build(iterator.next())));
+        }
+        return map;
       }
-
-      return map;
     }
   };
 
@@ -909,6 +997,155 @@ public final class BuilderFactory {
     }
   };
 
+  public static final Builder<Map<String, LatencyLatestInfo>> LATENCY_LATEST_RESPONSE = new Builder<Map<String, LatencyLatestInfo>>() {
+    @Override
+    public Map<String, LatencyLatestInfo> build(Object data) {
+      if (data == null) {
+        return null;
+      }
+
+      List<Object> rawList = (List<Object>) data;
+      Map<String, LatencyLatestInfo> map = new HashMap<>(rawList.size());
+
+      for (Object rawLatencyLatestInfo : rawList) {
+        if (rawLatencyLatestInfo == null) {
+          continue;
+        }
+
+        LatencyLatestInfo latestInfo = LatencyLatestInfo.LATENCY_LATEST_BUILDER.build(rawLatencyLatestInfo);
+        String name = latestInfo.getCommand();
+        map.put(name, latestInfo);
+      }
+
+      return map;
+    }
+  };
+
+  public static final Builder<List<LatencyHistoryInfo>> LATENCY_HISTORY_RESPONSE = new Builder<List<LatencyHistoryInfo>>() {
+    @Override
+    public List<LatencyHistoryInfo> build(Object data) {
+      if (data == null) {
+        return null;
+      }
+
+      List<Object> rawList = (List<Object>) data;
+      List<LatencyHistoryInfo> response = new ArrayList<>(rawList.size());
+
+      for (Object rawLatencyHistoryInfo : rawList) {
+        if (rawLatencyHistoryInfo == null) {
+          continue;
+        }
+
+        LatencyHistoryInfo historyInfo = LatencyHistoryInfo.LATENCY_HISTORY_BUILDER.build(rawLatencyHistoryInfo);
+        response.add(historyInfo);
+      }
+
+      return response;
+    }
+  };
+
+  private static final Builder<List<List<Long>>> CLUSTER_SHARD_SLOTS_RANGES = new Builder<List<List<Long>>>() {
+
+    @Override
+    public List<List<Long>> build(Object data) {
+      if (null == data) {
+        return null;
+      }
+
+      List<Long> rawSlots = (List<Long>) data;
+      List<List<Long>> slotsRanges = new ArrayList<>();
+      for (int i = 0; i < rawSlots.size(); i += 2) {
+        slotsRanges.add(Arrays.asList(rawSlots.get(i), rawSlots.get(i + 1)));
+      }
+      return slotsRanges;
+    }
+  };
+
+  private static final Builder<List<ClusterShardNodeInfo>> CLUSTER_SHARD_NODE_INFO_LIST
+      = new Builder<List<ClusterShardNodeInfo>>() {
+
+    final Map<String, Builder> mappingFunctions = createDecoderMap();
+
+    private Map<String, Builder> createDecoderMap() {
+
+      Map<String, Builder> tempMappingFunctions = new HashMap<>();
+      tempMappingFunctions.put(ClusterShardNodeInfo.ID, STRING);
+      tempMappingFunctions.put(ClusterShardNodeInfo.ENDPOINT, STRING);
+      tempMappingFunctions.put(ClusterShardNodeInfo.IP, STRING);
+      tempMappingFunctions.put(ClusterShardNodeInfo.HOSTNAME, STRING);
+      tempMappingFunctions.put(ClusterShardNodeInfo.PORT, LONG);
+      tempMappingFunctions.put(ClusterShardNodeInfo.TLS_PORT, LONG);
+      tempMappingFunctions.put(ClusterShardNodeInfo.ROLE, STRING);
+      tempMappingFunctions.put(ClusterShardNodeInfo.REPLICATION_OFFSET, LONG);
+      tempMappingFunctions.put(ClusterShardNodeInfo.HEALTH, STRING);
+
+      return tempMappingFunctions;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<ClusterShardNodeInfo> build(Object data) {
+      if (null == data) {
+        return null;
+      }
+
+      List<ClusterShardNodeInfo> response = new ArrayList<>();
+
+      List<Object> clusterShardNodeInfos = (List<Object>) data;
+      for (Object clusterShardNodeInfoObject : clusterShardNodeInfos) {
+        List<Object> clusterShardNodeInfo = (List<Object>) clusterShardNodeInfoObject;
+        Iterator<Object> iterator = clusterShardNodeInfo.iterator();
+        response.add(new ClusterShardNodeInfo(createMapFromDecodingFunctions(iterator, mappingFunctions)));
+      }
+
+      return response;
+    }
+
+    @Override
+    public String toString() {
+      return "List<ClusterShardNodeInfo>";
+    }
+  };
+
+  public static final Builder<List<ClusterShardInfo>> CLUSTER_SHARD_INFO_LIST
+          = new Builder<List<ClusterShardInfo>>() {
+
+    final Map<String, Builder> mappingFunctions = createDecoderMap();
+
+    private Map<String, Builder> createDecoderMap() {
+
+      Map<String, Builder> tempMappingFunctions = new HashMap<>();
+      tempMappingFunctions.put(ClusterShardInfo.SLOTS, CLUSTER_SHARD_SLOTS_RANGES);
+      tempMappingFunctions.put(ClusterShardInfo.NODES, CLUSTER_SHARD_NODE_INFO_LIST);
+
+      return tempMappingFunctions;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<ClusterShardInfo> build(Object data) {
+      if (null == data) {
+        return null;
+      }
+
+      List<ClusterShardInfo> response = new ArrayList<>();
+
+      List<Object> clusterShardInfos = (List<Object>) data;
+      for (Object clusterShardInfoObject : clusterShardInfos) {
+        List<Object> clusterShardInfo = (List<Object>) clusterShardInfoObject;
+        Iterator<Object> iterator = clusterShardInfo.iterator();
+        response.add(new ClusterShardInfo(createMapFromDecodingFunctions(iterator, mappingFunctions)));
+      }
+
+      return response;
+    }
+
+    @Override
+    public String toString() {
+      return "List<ClusterShardInfo>";
+    }
+  };
+
   public static final Builder<List<Module>> MODULE_LIST = new Builder<List<Module>>() {
     @Override
     public List<Module> build(Object data) {
@@ -924,6 +1161,11 @@ public final class BuilderFactory {
       }
 
       for (List<Object> moduleResp : objectList) {
+        if (moduleResp.get(0) instanceof KeyValue) {
+          responses.add(new Module(STRING.build(((KeyValue) moduleResp.get(0)).getValue()),
+              LONG.build(((KeyValue) moduleResp.get(1)).getValue()).intValue()));
+          continue;
+        }
         Module m = new Module(SafeEncoder.encode((byte[]) moduleResp.get(1)),
             ((Long) moduleResp.get(3)).intValue());
         responses.add(m);
@@ -942,74 +1184,17 @@ public final class BuilderFactory {
    * Create a AccessControlUser object from the ACL GETUSER reply.
    */
   public static final Builder<AccessControlUser> ACCESS_CONTROL_USER = new Builder<AccessControlUser>() {
-    @SuppressWarnings("unchecked")
     @Override
     public AccessControlUser build(Object data) {
-      if (data == null) {
-        return null;
-      }
-
-      List<Object> objectList = (List<Object>) data;
-      if (objectList.isEmpty()) {
-        return null;
-      }
-
-      AccessControlUser accessControlUser = new AccessControlUser();
-
-      // flags
-      List<Object> flags = (List<Object>) objectList.get(1);
-      for (Object f : flags) {
-        accessControlUser.addFlag(SafeEncoder.encode((byte[]) f));
-      }
-
-      // passwords
-      List<Object> passwords = (List<Object>) objectList.get(3);
-      for (Object p : passwords) {
-        accessControlUser.addPassword(SafeEncoder.encode((byte[]) p));
-      }
-
-      // commands
-      accessControlUser.setCommands(SafeEncoder.encode((byte[]) objectList.get(5)));
-
-      // Redis 7 -->
-      boolean withSelectors = objectList.size() >= 12;
-      if (!withSelectors) {
-
-        // keys
-        List<Object> keys = (List<Object>) objectList.get(7);
-        for (Object k : keys) {
-          accessControlUser.addKey(SafeEncoder.encode((byte[]) k));
-        }
-
-        // Redis 6.2 -->
-        // channels
-        if (objectList.size() >= 10) {
-          List<Object> channels = (List<Object>) objectList.get(9);
-          for (Object channel : channels) {
-            accessControlUser.addChannel(SafeEncoder.encode((byte[]) channel));
-          }
-        }
-
-      } else {
-        // TODO: Proper implementation of ACL V2.
-
-        // keys
-        accessControlUser.addKeys(SafeEncoder.encode((byte[]) objectList.get(7)));
-
-        // channels
-        accessControlUser.addChannels(SafeEncoder.encode((byte[]) objectList.get(9)));
-      }
-
-      // selectors
-      // TODO: Proper implementation of ACL V2.
-      return accessControlUser;
+      Map<String, Object> map = ENCODED_OBJECT_MAP.build(data);
+      if (map == null) return null;
+      return new AccessControlUser(map);
     }
 
     @Override
     public String toString() {
       return "AccessControlUser";
     }
-
   };
 
   /**
@@ -1213,46 +1398,36 @@ public final class BuilderFactory {
     }
   };
 
+  /**
+   * @deprecated Use {@link BuilderFactory#STREAM_AUTO_CLAIM_JUSTID_RESPONSE}.
+   */
+  @Deprecated
+  public static final Builder<Map.Entry<StreamEntryID, List<StreamEntryID>>> STREAM_AUTO_CLAIM_ID_RESPONSE
+      = STREAM_AUTO_CLAIM_JUSTID_RESPONSE;
+
   public static final Builder<List<Map.Entry<String, List<StreamEntry>>>> STREAM_READ_RESPONSE
       = new Builder<List<Map.Entry<String, List<StreamEntry>>>>() {
     @Override
     public List<Map.Entry<String, List<StreamEntry>>> build(Object data) {
       if (data == null) return null;
-      List streamObjects = (List) data;
+      List list = (List) data;
+      if (list.isEmpty()) return Collections.emptyList();
 
-      List<Map.Entry<String, List<StreamEntry>>> result = new ArrayList<>(streamObjects.size());
-      for (Object streamObj : streamObjects) {
-        List<Object> stream = (List<Object>) streamObj;
-        String streamKey = STRING.build(stream.get(0));
-        List<StreamEntry> streamEntries = STREAM_ENTRY_LIST.build(stream.get(1));
-        result.add(KeyValue.of(streamKey, streamEntries));
+      if (list.get(0) instanceof KeyValue) {
+        return ((List<KeyValue>) list).stream()
+            .map(kv -> new KeyValue<>(STRING.build(kv.getKey()),
+                STREAM_ENTRY_LIST.build(kv.getValue())))
+            .collect(Collectors.toList());
+      } else {
+        List<Map.Entry<String, List<StreamEntry>>> result = new ArrayList<>(list.size());
+        for (Object streamObj : list) {
+          List<Object> stream = (List<Object>) streamObj;
+          String streamKey = STRING.build(stream.get(0));
+          List<StreamEntry> streamEntries = STREAM_ENTRY_LIST.build(stream.get(1));
+          result.add(KeyValue.of(streamKey, streamEntries));
+        }
+        return result;
       }
-
-      return result;
-    }
-
-    @Override
-    public String toString() {
-      return "List<Entry<String, List<StreamEntry>>>";
-    }
-  };
-
-  public static final Builder<List<Map.Entry<String, List<StreamEntry>>>> STREAM_READ_RESPONSE_RESP3
-      = new Builder<List<Map.Entry<String, List<StreamEntry>>>>() {
-    @Override
-    public List<Map.Entry<String, List<StreamEntry>>> build(Object data) {
-      if (data == null) return null;
-      List streamObjects = (List) data;
-
-      List<Map.Entry<String, List<StreamEntry>>> result = new ArrayList<>(streamObjects.size() / 2);
-      Iterator iter = streamObjects.iterator();
-      while (iter.hasNext()) {
-        String streamKey = STRING.build(iter.next());
-        List<StreamEntry> streamEntries = STREAM_ENTRY_LIST.build(iter.next());
-        result.add(KeyValue.of(streamKey, streamEntries));
-      }
-
-      return result;
     }
 
     @Override
@@ -1373,7 +1548,10 @@ public final class BuilderFactory {
     }
   };
 
-  // TODO: rename to STREAM_CONSUMER_INFO_LIST ?
+  /**
+   * @deprecated Use {@link BuilderFactory#STREAM_CONSUMER_INFO_LIST}.
+   */
+  @Deprecated
   public static final Builder<List<StreamConsumersInfo>> STREAM_CONSUMERS_INFO_LIST
       = new Builder<List<StreamConsumersInfo>>() {
 
@@ -1417,6 +1595,51 @@ public final class BuilderFactory {
     @Override
     public String toString() {
       return "List<StreamConsumersInfo>";
+    }
+  };
+
+  public static final Builder<List<StreamConsumerInfo>> STREAM_CONSUMER_INFO_LIST
+      = new Builder<List<StreamConsumerInfo>>() {
+
+    Map<String, Builder> mappingFunctions = createDecoderMap();
+
+    private Map<String, Builder> createDecoderMap() {
+      Map<String, Builder> tempMappingFunctions = new HashMap<>();
+      tempMappingFunctions.put(StreamConsumerInfo.NAME, STRING);
+      tempMappingFunctions.put(StreamConsumerInfo.IDLE, LONG);
+      tempMappingFunctions.put(StreamConsumerInfo.PENDING, LONG);
+      return tempMappingFunctions;
+
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<StreamConsumerInfo> build(Object data) {
+      if (null == data) {
+        return null;
+      }
+
+      List<StreamConsumerInfo> list = new ArrayList<>();
+      List<Object> streamsEntries = (List<Object>) data;
+      Iterator<Object> groupsArray = streamsEntries.iterator();
+
+      while (groupsArray.hasNext()) {
+
+        List<Object> groupInfo = (List<Object>) groupsArray.next();
+
+        Iterator<Object> consumerInfoIterator = groupInfo.iterator();
+
+        StreamConsumerInfo streamConsumerInfo = new StreamConsumerInfo(
+            createMapFromDecodingFunctions(consumerInfoIterator, mappingFunctions));
+        list.add(streamConsumerInfo);
+      }
+
+      return list;
+    }
+
+    @Override
+    public String toString() {
+      return "List<StreamConsumerInfo>";
     }
   };
 
@@ -1509,8 +1732,7 @@ public final class BuilderFactory {
     }
   };
 
-  // TODO: raname to STREAM_FULL_INFO ?
-  public static final Builder<StreamFullInfo> STREAM_INFO_FULL = new Builder<StreamFullInfo>() {
+  public static final Builder<StreamFullInfo> STREAM_FULL_INFO = new Builder<StreamFullInfo>() {
 
     final Map<String, Builder> mappingFunctions = createDecoderMap();
 
@@ -1545,6 +1767,12 @@ public final class BuilderFactory {
       return "StreamFullInfo";
     }
   };
+
+  /**
+   * @deprecated Use {@link BuilderFactory#STREAM_FULL_INFO}.
+   */
+  @Deprecated
+  public static final Builder<StreamFullInfo> STREAM_INFO_FULL = STREAM_FULL_INFO;
 
   public static final Builder<StreamPendingSummary> STREAM_PENDING_SUMMARY = new Builder<StreamPendingSummary>() {
     @Override
@@ -1583,18 +1811,32 @@ public final class BuilderFactory {
   private static Map<String, Object> createMapFromDecodingFunctions(Iterator<Object> iterator,
       Map<String, Builder> mappingFunctions, Collection<Builder> backupBuilders) {
 
+    if (!iterator.hasNext()) {
+      return Collections.emptyMap();
+    }
+
     Map<String, Object> resultMap = new HashMap<>();
     while (iterator.hasNext()) {
+      final Object tempObject = iterator.next();
+      final String mapKey;
+      final Object rawValue;
 
-      String mapKey = STRING.build(iterator.next());
+      if (tempObject instanceof KeyValue) {
+        KeyValue kv = (KeyValue) tempObject;
+        mapKey = STRING.build(kv.getKey());
+        rawValue = kv.getValue();
+      } else {
+        mapKey = STRING.build(tempObject);
+        rawValue = iterator.next();
+      }
+
       if (mappingFunctions.containsKey(mapKey)) {
-        resultMap.put(mapKey, mappingFunctions.get(mapKey).build(iterator.next()));
+        resultMap.put(mapKey, mappingFunctions.get(mapKey).build(rawValue));
       } else { // For future - if we don't find an element in our builder map
-        Object unknownData = iterator.next();
         Collection<Builder> builders = backupBuilders != null ? backupBuilders : mappingFunctions.values();
         for (Builder b : builders) {
           try {
-            resultMap.put(mapKey, b.build(unknownData));
+            resultMap.put(mapKey, b.build(rawValue));
             break;
           } catch (ClassCastException e) {
             // We continue with next builder
@@ -1623,32 +1865,49 @@ public final class BuilderFactory {
         List<MatchedPosition> matchedPositions = new ArrayList<>();
 
         List<Object> objectList = (List<Object>) data;
-        if ("matches".equalsIgnoreCase(STRING.build(objectList.get(0)))) {
-          List<Object> matches = (List<Object>)objectList.get(1);
-          for (Object obj : matches) {
-            if (obj instanceof List<?>) {
-              List<Object> positions = (List<Object>) obj;
-              Position a = new Position(
-                  LONG.build(((List<Object>) positions.get(0)).get(0)),
-                  LONG.build(((List<Object>) positions.get(0)).get(1))
-              );
-              Position b = new Position(
-                  LONG.build(((List<Object>) positions.get(1)).get(0)),
-                  LONG.build(((List<Object>) positions.get(1)).get(1))
-              );
-              long matchLen = 0;
-              if (positions.size() >= 3) {
-                matchLen = LONG.build(positions.get(2));
-              }
-              matchedPositions.add(new MatchedPosition(a, b, matchLen));
+        if (objectList.get(0) instanceof KeyValue) {
+          Iterator iterator = objectList.iterator();
+          while (iterator.hasNext()) {
+            KeyValue kv = (KeyValue) iterator.next();
+            if ("matches".equalsIgnoreCase(STRING.build(kv.getKey()))) {
+              addMatchedPosition(matchedPositions, kv.getValue());
+            } else if ("len".equalsIgnoreCase(STRING.build(kv.getKey()))) {
+              len = LONG.build(kv.getValue());
+            }
+          }
+        } else {
+          for (int i = 0; i < objectList.size(); i += 2) {
+            if ("matches".equalsIgnoreCase(STRING.build(objectList.get(i)))) {
+              addMatchedPosition(matchedPositions, objectList.get(i + 1));
+            } else if ("len".equalsIgnoreCase(STRING.build(objectList.get(i)))) {
+              len = LONG.build(objectList.get(i + 1));
             }
           }
         }
 
-        if ("len".equalsIgnoreCase(STRING.build(objectList.get(2)))) {
-          len = LONG.build(objectList.get(3));
-        }
         return new LCSMatchResult(matchedPositions, len);
+      }
+    }
+
+    private void addMatchedPosition(List<MatchedPosition> matchedPositions, Object o) {
+      List<Object> matches = (List<Object>) o;
+      for (Object obj : matches) {
+        if (obj instanceof List<?>) {
+          List<Object> positions = (List<Object>) obj;
+          Position a = new Position(
+              LONG.build(((List<Object>) positions.get(0)).get(0)),
+              LONG.build(((List<Object>) positions.get(0)).get(1))
+          );
+          Position b = new Position(
+              LONG.build(((List<Object>) positions.get(1)).get(0)),
+              LONG.build(((List<Object>) positions.get(1)).get(1))
+          );
+          long matchLen = 0;
+          if (positions.size() >= 3) {
+            matchLen = LONG.build(positions.get(2));
+          }
+          matchedPositions.add(new MatchedPosition(a, b, matchLen));
+        }
       }
     }
   };
@@ -1657,13 +1916,22 @@ public final class BuilderFactory {
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, String> build(Object data) {
-      final List<Object> list = (List<Object>) data;
-      final Map<String, String> map = new HashMap<>(list.size());
-      for (Object object : list) {
-        final List<byte[]> flat = (List<byte[]>) object;
-        map.put(SafeEncoder.encode(flat.get(0)), flat.get(1) != null ? SafeEncoder.encode(flat.get(1)) : null);
+      final List list = (List) data;
+      if (list.isEmpty()) return Collections.emptyMap();
+
+      if (list.get(0) instanceof KeyValue) {
+        return ((List<KeyValue>) list).stream()
+            .collect(Collectors.toMap(kv -> STRING.build(kv.getKey()),
+                kv -> STRING.build(kv.getValue())));
       }
 
+      final Map<String, String> map = new HashMap<>(list.size());
+      for (Object object : list) {
+        if (object == null) continue;
+        final List<Object> flat = (List<Object>) object;
+        if (flat.isEmpty()) continue;
+        map.put(STRING.build(flat.get(0)), STRING.build(flat.get(1)));
+      }
       return map;
     }
 
@@ -1673,13 +1941,40 @@ public final class BuilderFactory {
     }
   };
 
-  public static final Builder<List<LibraryInfo>> LIBRARY_LIST = new Builder<List<LibraryInfo>>() {
+  public static final Builder<Map<String, Object>> ENCODED_OBJECT_MAP_FROM_PAIRS = new Builder<Map<String, Object>>() {
     @Override
-    public List<LibraryInfo> build(Object data) {
-      List<Object> list = (List<Object>) data;
-      return list.stream().map(o -> LibraryInfo.LIBRARY_BUILDER.build(o)).collect(Collectors.toList());
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> build(Object data) {
+      final List list = (List) data;
+      if (list.isEmpty()) return Collections.emptyMap();
+
+      if (list.get(0) instanceof KeyValue) {
+        return ((List<KeyValue>) list).stream()
+            .collect(Collectors.toMap(kv -> STRING.build(kv.getKey()),
+                kv -> ENCODED_OBJECT.build(kv.getValue())));
+      }
+
+      final Map<String, Object> map = new HashMap<>(list.size());
+      for (Object object : list) {
+        if (object == null) continue;
+        final List<Object> flat = (List<Object>) object;
+        if (flat.isEmpty()) continue;
+        map.put(STRING.build(flat.get(0)), STRING.build(flat.get(1)));
+      }
+      return map;
+    }
+
+    @Override
+    public String toString() {
+      return "Map<String, String>";
     }
   };
+
+  /**
+   * @deprecated Use {@link LibraryInfo#LIBRARY_INFO_LIST}.
+   */
+  @Deprecated
+  public static final Builder<List<LibraryInfo>> LIBRARY_LIST = LibraryInfo.LIBRARY_INFO_LIST;
 
   public static final Builder<List<List<String>>> STRING_LIST_LIST = new Builder<List<List<String>>>() {
     @Override
@@ -1818,5 +2113,4 @@ public final class BuilderFactory {
   private BuilderFactory() {
     throw new InstantiationError("Must not instantiate this class");
   }
-
 }

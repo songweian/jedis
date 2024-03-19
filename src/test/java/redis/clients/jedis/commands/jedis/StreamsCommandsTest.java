@@ -18,10 +18,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.hamcrest.MatcherAssert;
 import org.hamcrest.Matchers;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import redis.clients.jedis.BuilderFactory;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
+import redis.clients.jedis.RedisProtocol;
 import redis.clients.jedis.Response;
 import redis.clients.jedis.StreamEntryID;
 import redis.clients.jedis.Transaction;
@@ -31,7 +34,12 @@ import redis.clients.jedis.params.*;
 import redis.clients.jedis.resps.*;
 import redis.clients.jedis.util.SafeEncoder;
 
+@RunWith(Parameterized.class)
 public class StreamsCommandsTest extends JedisCommandsTestBase {
+
+  public StreamsCommandsTest(RedisProtocol protocol) {
+    super(protocol);
+  }
 
   @Test
   public void xadd() {
@@ -500,7 +508,7 @@ public class StreamsCommandsTest extends JedisCommandsTestBase {
 
   @Test
   public void xack() {
-    Map<String, String> map = new HashMap<String, String>();
+    Map<String, String> map = new HashMap<>();
     map.put("f1", "v1");
     jedis.xadd("xack-stream", (StreamEntryID) null, map);
 
@@ -803,6 +811,7 @@ public class StreamsCommandsTest extends JedisCommandsTestBase {
 
     List<StreamGroupInfo> groupInfo = jedis.xinfoGroups(STREAM_NAME);
     List<StreamConsumersInfo> consumersInfo = jedis.xinfoConsumers(STREAM_NAME, G1);
+    List<StreamConsumerInfo> consumerInfo = jedis.xinfoConsumers2(STREAM_NAME, G1);
 
     // Stream info test
     assertEquals(2L, streamInfo.getStreamInfo().get(StreamInfo.LENGTH));
@@ -836,7 +845,7 @@ public class StreamsCommandsTest extends JedisCommandsTestBase {
     assertEquals(0, groupInfo.get(0).getPending());
     assertEquals(id2, groupInfo.get(0).getLastDeliveredId());
 
-    // Consumer info test
+    // Consumers info test
     assertEquals(MY_CONSUMER,
       consumersInfo.get(0).getConsumerInfo().get(StreamConsumersInfo.NAME));
     assertEquals(0L, consumersInfo.get(0).getConsumerInfo().get(StreamConsumersInfo.PENDING));
@@ -848,6 +857,18 @@ public class StreamsCommandsTest extends JedisCommandsTestBase {
     MatcherAssert.assertThat(consumersInfo.get(0).getIdle(), Matchers.greaterThanOrEqualTo(0L));
     MatcherAssert.assertThat(consumersInfo.get(0).getInactive(), Matchers.any(Long.class));
 
+    // Consumer info test
+    assertEquals(MY_CONSUMER,
+      consumerInfo.get(0).getConsumerInfo().get(StreamConsumerInfo.NAME));
+    assertEquals(0L, consumerInfo.get(0).getConsumerInfo().get(StreamConsumerInfo.PENDING));
+    assertTrue((Long) consumerInfo.get(0).getConsumerInfo().get(StreamConsumerInfo.IDLE) > 0);
+
+    // Using getters
+    assertEquals(MY_CONSUMER, consumerInfo.get(0).getName());
+    assertEquals(0L, consumerInfo.get(0).getPending());
+    MatcherAssert.assertThat(consumerInfo.get(0).getIdle(), Matchers.greaterThanOrEqualTo(0L));
+    MatcherAssert.assertThat(consumerInfo.get(0).getInactive(), Matchers.any(Long.class));
+
     // test with more groups and consumers
     jedis.xgroupCreate(STREAM_NAME, G2, StreamEntryID.LAST_ENTRY, false);
     jedis.xreadGroup(G1, MY_CONSUMER2, XReadGroupParams.xReadGroupParams().count(1), streamQeury11);
@@ -856,9 +877,11 @@ public class StreamsCommandsTest extends JedisCommandsTestBase {
 
     List<StreamGroupInfo> manyGroupsInfo = jedis.xinfoGroups(STREAM_NAME);
     List<StreamConsumersInfo> manyConsumersInfo = jedis.xinfoConsumers(STREAM_NAME, G2);
+    List<StreamConsumerInfo> manyConsumerInfo = jedis.xinfoConsumers2(STREAM_NAME, G2);
 
     assertEquals(2, manyGroupsInfo.size());
     assertEquals(2, manyConsumersInfo.size());
+    assertEquals(2, manyConsumerInfo.size());
 
     StreamFullInfo streamInfoFull = jedis.xinfoStreamFull(STREAM_NAME);
 
